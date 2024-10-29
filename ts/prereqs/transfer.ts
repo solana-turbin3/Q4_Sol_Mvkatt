@@ -1,21 +1,36 @@
-import { Transaction, SystemProgram, Connection, Keypair, LAMPORTS_PER_SOL, sendAndConfirmTransaction, PublicKey } from "@solana/web3.js"
-import wallet from "../dev-wallet.json"
+import { Transaction, SystemProgram, Connection, Keypair, LAMPORTS_PER_SOL, sendAndConfirmTransaction, PublicKey } from "@solana/web3.js";
 
-// Import our dev wallet keypair from the wallet file
+import wallet from "../../wallets/dev-wallet.json";
+
 const from = Keypair.fromSecretKey(new Uint8Array(wallet));
-// Define our WBA public key
-const to = new PublicKey("GLtaTaYiTQrgz411iPJD79rsoee59HhEy18rtRdrhEUJ");
+const to = new PublicKey("EaHopsEgJ7JnjS7anmTBMi8ArVyrPt8h59AerLa1ZVdp");
+const connection = new Connection("https://api.devnet.solana.com");
 
-//Create a Solana devnet connection
-const connection = new Connection("https://api.devnet.solana.com", "confirmed");
-
-(async () => {
+async function sendLamports (amount: number): Promise<void> {
     try {
-        // Get balance of dev wallet
-        const balance = await connection.getBalance(from.publicKey)
-        console.log(`Balance: ${balance}`)
+        const transaction = new Transaction().add(
+            SystemProgram.transfer({
+                fromPubkey: from.publicKey,
+                toPubkey: to,
+                lamports: amount,
+            })
+        );
 
-        // Create a test transaction to calculate fees
+        transaction.recentBlockhash = (await connection.getLatestBlockhash("confirmed")).blockhash;
+        transaction.feePayer = from.publicKey;
+
+        const signature = await sendAndConfirmTransaction(connection, transaction, [from]);
+
+        console.log(`Success! Check out your TX here: https://explorer.solana.com/tx/${signature}?cluster=devnet`);
+    } catch (e) {
+        console.error(`Oops, something went wrong: ${e}`);
+    }
+}
+
+async function emptyWallet (): Promise<void> {
+    try {
+        const balance = await connection.getBalance(from.publicKey);
+
         const transaction = new Transaction().add(
             SystemProgram.transfer({
                 fromPubkey: from.publicKey,
@@ -23,17 +38,14 @@ const connection = new Connection("https://api.devnet.solana.com", "confirmed");
                 lamports: balance,
             })
         );
-        transaction.recentBlockhash = (await connection.getLatestBlockhash('confirmed')).blockhash;
+
+        transaction.recentBlockhash = (await connection.getLatestBlockhash("confirmed")).blockhash;
         transaction.feePayer = from.publicKey;
 
-        // Calculate exact fee rate to transfer entire SOL amount out of account minus fees
-        const fee = (await connection.getFeeForMessage(transaction.compileMessage(), 'confirmed')).value || 0;
+        const fee = (await connection.getFeeForMessage(transaction.compileMessage(), "confirmed")).value || 0;
 
-
-        // Remove our transfer instruction to replace it
         transaction.instructions.pop();
 
-        // Now add the instruction back with correct amount of lamports
         transaction.add(
             SystemProgram.transfer({
                 fromPubkey: from.publicKey,
@@ -42,15 +54,17 @@ const connection = new Connection("https://api.devnet.solana.com", "confirmed");
             })
         );
 
-        // Sign transaction, broadcast, and confirm
-        const signature = await sendAndConfirmTransaction(
-            connection,
-            transaction,
-            [from]
-        );
-        console.log(`Success! Check out your TX here: 
-        https://explorer.solana.com/tx/${signature}?cluster=devnet`)
-    } catch(e) {
-        console.error(`Oops, something went wrong: ${e}`)
+        const signature = await sendAndConfirmTransaction(connection, transaction, [from]);
+
+        console.log(`Success! Check out your TX here: https://explorer.solana.com/tx/${signature}?cluster=devnet`);
+    } catch (e) {
+        console.error(`Oops, something went wrong: ${e}`);
     }
-})();
+}
+
+function main () {
+    // sendLamports(LAMPORTS_PER_SOL/100);
+    emptyWallet();
+}
+
+main();
